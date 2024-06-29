@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+requests
+shortuuid
+transformers
+tokenizers
+semantic-text-splitter
