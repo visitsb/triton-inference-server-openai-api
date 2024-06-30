@@ -26,6 +26,7 @@ import uuid
 from datetime import datetime, timezone
 from os import path
 
+import anyio
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import Response, StreamingResponse, JSONResponse
@@ -361,7 +362,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
 
     if stream:
 
-        def chunks():
+        async def chunks():
             splitter = TextSplitter.from_huggingface_tokenizer(
                 output_tokenizer, 3, trim=False
             )
@@ -396,6 +397,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
                     id=id, model=model, choices=[choice], usage=usage, created=ts()
                 )
                 yield f"data: {json.dumps(chunk, cls=ChatCompletionResponseStreamJsonEncoder)}\n\n"
+                await anyio.sleep(10 / 1000)  # Small delay to send out chunk
 
             # finish_reason="stop"
             delta = DeltaMessage(role=role, content="")
