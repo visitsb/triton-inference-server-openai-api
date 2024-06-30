@@ -4,4 +4,6 @@ requests
 shortuuid
 transformers
 tokenizers
+sentencepiece
+protobuf
 semantic-text-splitter

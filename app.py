@@ -294,13 +294,14 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     tokenizer.padding_side = "left"
 
     messages = [message for message in request.messages]
-    messages.insert(
-        0,
-        {
-            "role": "system",
-            "content": "You are a helpful assistant.",
-        },  # Always preclude a `system`` message for better model response
-    )
+    # Issue: Mistral template error `Conversation roles must alternate user/assistant/user/assistant/`
+    # messages.insert(
+    #     0,
+    #     {
+    #         "role": "assistant",
+    #         "content": "You are a helpful assistant.",
+    #     },  # Always preclude a `system`` message for better model response
+    # )
 
     # https://platform.openai.com/docs/guides/prompt-engineering/six-strategies-for-getting-better-results
     text_input = tokenizer.apply_chat_template(
