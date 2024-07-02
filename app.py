@@ -331,7 +331,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
                 # Remaining values copied as-is
                 "temperature": request.temperature,
                 "top_p": request.top_p,
-                # "top_k": request.top_k,
+                "top_k": 1,  # request.top_k
                 "presence_penalty": request.presence_penalty,
                 "frequency_penalty": request.frequency_penalty,
                 # Unknown to model parameters
