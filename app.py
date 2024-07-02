@@ -20,6 +20,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import argparse
+import random
 import json
 import re
 import uuid
@@ -299,7 +300,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     # messages.insert(
     #     0,
     #     {
-    #         "role": "assistant",
+    #         "role": "system",
     #         "content": "You are a helpful assistant.",
     #     },  # Always preclude a `system`` message for better model response
     # )
@@ -330,7 +331,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
                 # Remaining values copied as-is
                 "temperature": request.temperature,
                 "top_p": request.top_p,
-                "top_k": request.top_k,
+                # "top_k": request.top_k,
                 "presence_penalty": request.presence_penalty,
                 "frequency_penalty": request.frequency_penalty,
                 # Unknown to model parameters
@@ -397,7 +398,9 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
                     id=id, model=model, choices=[choice], usage=usage, created=ts()
                 )
                 yield f"data: {json.dumps(chunk, cls=ChatCompletionResponseStreamJsonEncoder)}\n\n"
-                await anyio.sleep(10 / 1000)  # Small delay to send out chunk
+                # Small random delay to send out next chunk
+                delay = random.choice([10, 20, 30, 40, 50])
+                await anyio.sleep(delay / 1000)
 
             # finish_reason="stop"
             delta = DeltaMessage(role=role, content="")

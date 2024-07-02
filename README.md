@@ -13,19 +13,19 @@ POST     /v1/chat/completions (or /v1/completions) streaming supported
 ## Usage
 **Recommended** Use a pre-published [Docker image](https://hub.docker.com/repository/docker/visitsb/tritonserver)
 ```bash
-docker image pull visitsb/tritonserver:24.05-trtllm-python-py3
+docker image pull visitsb/tritonserver:24.06-trtllm-python-py3
 ```
 
 Alternatively, use the `Dockerfile` to build a local image. The proxy is built on top of existing [Triton Inference Server](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver) docker image which precludes the TensorRT-LLM backend.
 
 ```bash
 # Pull upstream NVIDIA docker image
-docker image pull nvcr.io/nvidia/tritonserver:24.05-trtllm-python-py3
+docker image pull nvcr.io/nvidia/tritonserver:24.06-trtllm-python-py3
 # Clone this repository
 git clone <this repository>
 cd triton-inference-server-openai-api
 # Build your custom docker image with proxy bundled
-docker buildx build --no-cache --tag myimages/tritonserver:24.05-trtllm-python-py3 .
+docker buildx build --no-cache --tag myimages/tritonserver:24.06-trtllm-python-py3 .
 ```
 
 Once your image is pulled (or built locally) you can run it directly using Docker-
@@ -36,7 +36,7 @@ docker run --rm --tty --interactive \
        --cpuset-cpus 0-3 --publish 11434:11434/tcp \
        --volume <your Triton models folder>:/models:rw \
        --name triton \
-       visitsb/tritonserver:24.05-trtllm-python-py3 \
+       visitsb/tritonserver:24.06-trtllm-python-py3 \
        sh -c '/opt/tritonserver/bin/tritonserver \
               --model-store /models/mymodel/model \
             & /opt/tritonserver/bin/tritonopenaiserver \
@@ -46,7 +46,7 @@ docker run --rm --tty --interactive \
 Alternatively using `docker-compose.yml`-
 ```yaml
 triton:
-    image: visitsb/tritonserver:24.05-trtllm-python-py3
+    image: visitsb/tritonserver:24.06-trtllm-python-py3
     command: >
       sh -c '/opt/tritonserver/bin/tritonserver --model-store /models/mymodel/model & /opt/tritonserver/bin/tritonopenaiserver --tokenizer_dir /models/mymodel/tokenizer'
     ports:
