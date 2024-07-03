@@ -305,10 +305,16 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     #     },  # Always preclude a `system`` message for better model response
     # )
 
+    # Avoid lengthy conversations, keep at last 4 (user/assistant/user/assistant/) messages
+    # This optimizes context for next response
+    messages = messages[-3:]
+
     # https://platform.openai.com/docs/guides/prompt-engineering/six-strategies-for-getting-better-results
     text_input = tokenizer.apply_chat_template(
         messages, add_generation_prompt=True, tokenize=False
     )
+
+    # TODO: `text_input` to cut-off at `--max_input_len` specific to model
 
     # https://github.com/triton-inference-server/server/blob/main/docs/protocol/extension_generate.md#generate-vs-generate_stream
     # NOTE: `generate_stream` endpoint simply sends _same_ response as non-stream endpoint, one character at a time over SSE.
