@@ -83,6 +83,12 @@ parser.add_argument(
     help="Path to a HuggingFace folder containing `tokenizer.json`",
 )
 parser.add_argument(
+    "--engine_dir",
+    type=str,
+    required=True,
+    help="Path to a TensorRT-LLM engine folder containing `config.json`",
+)
+parser.add_argument(
     "--default_max_tokens",
     type=int,
     required=False,
@@ -119,10 +125,31 @@ triton_http_proto = args.triton_http_proto
 triton_http_host = args.triton_http_host
 triton_http_port = args.triton_http_port
 tokenizer_dir = args.tokenizer_dir
+engine_dir = args.engine_dir
 default_max_tokens = args.default_max_tokens
 host = args.host
 port = args.port
 verbose = args.verbose
+
+# Note: Below initialization limits to only 1 model loaded on server startup.
+#
+# Require `Tokenizer`` for TextSplitter, as it won't directly support `AutoTokenizer`
+# (needs `to_str` - https://huggingface.co/docs/tokenizers/api/tokenizer#tokenizers.Tokenizer.to_str`)
+# https://github.com/benbrandt/text-splitter?tab=readme-ov-file#with-hugging-face-tokenizer
+# https://pypi.org/project/semantic-text-splitter/
+output_tokenizer = Tokenizer.from_file(path.join(tokenizer_dir, "tokenizer.json"))
+
+# Pick limits based on model
+build_config = {
+    "max_input_len": default_max_tokens,
+    "max_output_len": default_max_tokens,
+}
+with open(f'{path.join(engine_dir, "config.json")}') as config_file:
+    config = json.load(config_file)
+    build_config = config["build_config"]
+    config_file.close()
+
+# Note: Above initialization limits to only 1 model loaded on server startup.
 
 # Ignore any models except `ensemble`
 ignored_models_regex = re.compile(
@@ -144,6 +171,15 @@ def triton_server() -> str:
 
 # Fix model creation date to time this server was started
 server_start_ts = ts()
+
+
+class ChatMessageJsonEncoder(json.JSONEncoder):
+    """Support JSON encoding ChatMessage"""
+
+    def default(self, o):
+        if isinstance(o, ChatMessage):
+            return {"role": o.role, "content": o.content}
+        return json.JSONEncoder.default(self, o)
 
 
 class ChatCompletionResponseStreamJsonEncoder(json.JSONEncoder):
@@ -284,11 +320,24 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     model = request.model
     role = "assistant"
 
-    max_tokens = int(request.max_tokens or default_max_tokens)
+    max_input_len = int(request.max_tokens or build_config["max_input_len"])
+    max_output_len = int(request.max_tokens or build_config["max_output_len"])
     stopwords = request.stop if request.stop else []
     stream = bool(request.stream)
     stream_options = request.stream_options or StreamOptions(include_usage=False)
     stream_include_usage = bool(stream_options.include_usage)
+
+    # Cap limits
+    max_input_len = (
+        max_input_len
+        if max_input_len <= build_config["max_input_len"]
+        else build_config["max_input_len"]
+    )
+    max_output_len = (
+        max_output_len
+        if max_output_len <= build_config["max_output_len"]
+        else build_config["max_output_len"]
+    )
 
     # Setup the tokenizer
     tokenizer = AutoTokenizer.from_pretrained(f"{tokenizer_dir}")
@@ -296,6 +345,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     tokenizer.padding_side = "left"
 
     messages = [message for message in request.messages]
+
     # Issue: Mistral template error `Conversation roles must alternate user/assistant/user/assistant/`
     # messages.insert(
     #     0,
@@ -305,7 +355,20 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     #     },  # Always preclude a `system`` message for better model response
     # )
 
-    # Avoid lengthy conversations, keep at last 4 (user/assistant/user/assistant/) messages
+    if messages[-1]["role"] != "user":  # Continue conversation
+        messages.append(
+            json.loads(  # Load as JSON object
+                json.dumps(  # Conver to JSON string
+                    ChatMessage(
+                        role="user",
+                        content="...",
+                    ),
+                    cls=ChatMessageJsonEncoder,
+                )
+            )
+        )
+
+    # Avoid lengthy conversations, keep at last 6 (user/assistant/user/assistant/) messages
     # This optimizes context for next response
     messages = messages[-3:]
 
@@ -313,8 +376,6 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     text_input = tokenizer.apply_chat_template(
         messages, add_generation_prompt=True, tokenize=False
     )
-
-    # TODO: `text_input` to cut-off at `--max_input_len` specific to model
 
     # https://github.com/triton-inference-server/server/blob/main/docs/protocol/extension_generate.md#generate-vs-generate_stream
     # NOTE: `generate_stream` endpoint simply sends _same_ response as non-stream endpoint, one character at a time over SSE.
@@ -325,9 +386,9 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
 
     data = json.dumps(
         {
-            "text_input": text_input,
+            "text_input": text_input[-max_input_len:],
             "parameters": {
-                "max_tokens": max_tokens,
+                "max_tokens": max_output_len,
                 "bad_words": stopwords,
                 "stop_words": stopwords,
                 # Model defaults variables
@@ -360,12 +421,9 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
 
     prompt = messages[-1]["content"]  # User request
     text_output = response_json["text_output"]
-
-    # Require `Tokenizer`` for TextSplitter, as it won't directly support `AutoTokenizer`
-    # (needs `to_str` - https://huggingface.co/docs/tokenizers/api/tokenizer#tokenizers.Tokenizer.to_str`)
-    # https://github.com/benbrandt/text-splitter?tab=readme-ov-file#with-hugging-face-tokenizer
-    # https://pypi.org/project/semantic-text-splitter/
-    output_tokenizer = Tokenizer.from_file(path.join(tokenizer_dir, "tokenizer.json"))
+    text_output = (
+        f"\n\n{text_output}"  # Prefix response with delimiter to indicate start
+    )
 
     if stream:
 
@@ -393,6 +451,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
                 else None
             )  # see ChatCompletionResponseStreamJsonEncoder
 
+            # Response chunks
             # for data in response.iter_content(decode_unicode=True):
             for index, content in enumerate(chunks):
                 # finish_reason=None
@@ -413,7 +472,9 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
             choice = ChatCompletionResponseStreamChoice(
                 index=0,
                 delta=delta,
-                finish_reason="length" if (completion_tokens == max_tokens) else "stop",
+                finish_reason=(
+                    "length" if (completion_tokens == max_output_len) else "stop"
+                ),
             )
 
             chunk = ChatCompletionStreamResponse(
@@ -456,7 +517,7 @@ def chatCompletion(request: ChatCompletionRequest, raw_request: Request):
     choice = ChatCompletionResponseChoice(
         index=0,
         message=message,
-        finish_reason="length" if (completion_tokens == max_tokens) else "stop",
+        finish_reason="length" if (completion_tokens == max_output_len) else "stop",
     )
     usage = UsageInfo(
         prompt_tokens=prompt_tokens,
