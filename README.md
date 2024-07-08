@@ -11,7 +11,7 @@ POST     /v1/chat/completions (or /v1/completions) streaming supported
 ```
 
 ## Docker image
-**Recommended** Use a pre-published [Docker image](https://hub.docker.com/repository/docker/visitsb/tritonserver)
+**Recommended** Use a pre-published [Docker image](https://hub.docker.com/r/visitsb/tritonserver)
 ```bash
 docker image pull visitsb/tritonserver:24.06-trtllm-python-py3
 ```
