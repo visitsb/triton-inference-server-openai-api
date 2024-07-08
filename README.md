@@ -10,13 +10,13 @@ GET      /v1/models/{model}   (or /models/{model})
 POST     /v1/chat/completions (or /v1/completions) streaming supported
 ```
 
-## Usage
+## Docker image
 **Recommended** Use a pre-published [Docker image](https://hub.docker.com/repository/docker/visitsb/tritonserver)
 ```bash
 docker image pull visitsb/tritonserver:24.06-trtllm-python-py3
 ```
 
-Alternatively, use the `Dockerfile` to build a local image. The proxy is built on top of existing [Triton Inference Server](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver) docker image which precludes the TensorRT-LLM backend.
+Alternatively, use the `Dockerfile` to build a local image. The proxy is built on top of existing [Triton Inference Server](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver) docker image which includes the TensorRT-LLM backend.
 
 ```bash
 # Pull upstream NVIDIA docker image
@@ -28,6 +28,7 @@ cd triton-inference-server-openai-api
 docker buildx build --no-cache --tag myimages/tritonserver:24.06-trtllm-python-py3 .
 ```
 
+## Usage
 Once your image is pulled (or built locally) you can run it directly using Docker-
 ```bash
 # Run Triton Inference Server alongwith proxy as shoen in `sh -c` command
@@ -40,7 +41,8 @@ docker run --rm --tty --interactive \
        sh -c '/opt/tritonserver/bin/tritonserver \
               --model-store /models/mymodel/model \
             & /opt/tritonserver/bin/tritonopenaiserver \
-              --tokenizer_dir /models/mymodel/tokenizer'
+              --tokenizer_dir /models/mymodel/tokenizer \
+              --engine_dir /models/mymodel/engine'
 ```
 
 Alternatively using `docker-compose.yml`-
@@ -48,7 +50,7 @@ Alternatively using `docker-compose.yml`-
 triton:
     image: visitsb/tritonserver:24.06-trtllm-python-py3
     command: >
-      sh -c '/opt/tritonserver/bin/tritonserver --model-store /models/mymodel/model & /opt/tritonserver/bin/tritonopenaiserver --tokenizer_dir /models/mymodel/tokenizer'
+      sh -c '/opt/tritonserver/bin/tritonserver --model-store /models/mymodel/model & /opt/tritonserver/bin/tritonopenaiserver --tokenizer_dir /models/mymodel/tokenizer --engine_dir /models/mymodel/engine'
     ports:
       - "11434:11434/tcp" # OpenAI API Proxy
       - "8000:8000/tcp"   # HTTP
